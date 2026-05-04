@@ -1,0 +1,143 @@
+version: "3.9"
+
+services:
+  # ─────────────────────────────────────────
+  # PostgreSQL — Work Items + RCA (Source of Truth)
+  # ─────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: ims_postgres
+    environment:
+      POSTGRES_USER: ims_user
+      POSTGRES_PASSWORD: ims_pass
+      POSTGRES_DB: ims_db
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ims_user -d ims_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─────────────────────────────────────────
+  # MongoDB — Raw Signal Audit Log
+  # ─────────────────────────────────────────
+  mongo:
+    image: mongo:7
+    container_name: ims_mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ims_user
+      MONGO_INITDB_ROOT_PASSWORD: ims_pass
+      MONGO_INITDB_DATABASE: ims_db
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─────────────────────────────────────────
+  # Redis — Dashboard Hot-Path Cache + Debounce
+  # ─────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: ims_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─────────────────────────────────────────
+  # InfluxDB — Timeseries Aggregations
+  # ─────────────────────────────────────────
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: ims_influxdb
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ims_user
+      DOCKER_INFLUXDB_INIT_PASSWORD: ims_pass_influx
+      DOCKER_INFLUXDB_INIT_ORG: ims_org
+      DOCKER_INFLUXDB_INIT_BUCKET: ims_signals
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ims-influx-token-secret
+    ports:
+      - "8086:8086"
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─────────────────────────────────────────
+  # Backend — Node.js + Express + TypeScript
+  # ─────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ims_backend
+    ports:
+      - "3000:3000"   # REST API
+      - "9999:9999/udp" # UDP Signal Ingestion
+      - "3001:3001"   # WebSocket
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      WS_PORT: 3001
+      UDP_PORT: 9999
+
+      # PostgreSQL
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_USER: ims_user
+      PG_PASSWORD: ims_pass
+      PG_DATABASE: ims_db
+
+      # MongoDB
+      MONGO_URI: mongodb://ims_user:ims_pass@mongo:27017/ims_db?authSource=admin
+
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+      # InfluxDB
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN: ims-influx-token-secret
+      INFLUX_ORG: ims_org
+      INFLUX_BUCKET: ims_signals
+
+      # Debounce window in seconds
+      DEBOUNCE_WINDOW_SEC: 10
+
+      # In-memory queue max capacity
+      QUEUE_MAX_SIZE: 50000
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+
+  # # ─────────────────────────────────────────
+  # # Frontend — React + TypeScript (Vite)
+  # # ─────────────────────────────────────────
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   container_name: ims_frontend
+  #   ports:
+  #     - "5173:5173"
+  #   environment:
+  #     VITE_API_URL: http://localhost:3000
+  #     VITE_WS_URL: ws://localhost:3001
+  #   depends_on:
+  #     - backend
