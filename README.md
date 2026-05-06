@@ -110,7 +110,7 @@ node --test tests/*.test.js
 
 | Document | Description |
 |---|---|
-| [Architecture](./ARCHITECTURE.md) | System design, data flows, design patterns |
-| [API Reference](./API_REFERENCE.md) | All REST endpoints with request/response shapes |
-| [Setup Guide](./SETUP_GUIDE.md) | Detailed environment setup and configuration |
-| [Backpressure](./BACKPRESSURE.md) | How the system handles burst traffic without crashing |
+| [Architecture](./docs/ARCHITECTURE.md) | System design, data flows, design patterns |
+| [API Reference](./docs/API_REFERENCE.md) | All REST endpoints with request/response shapes |
+| [Setup Guide](./docs/SETUP_GUIDE.md) | Detailed environment setup and configuration |
+| [Backpressure](./docs/BACKPRESSURE.md) | How the system handles burst traffic without crashing |
