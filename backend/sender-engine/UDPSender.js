@@ -3,7 +3,6 @@ const fs = require('fs');
 
 const client = dgram.createSocket('udp4');
 
-// Load signals from JSON file
 const signals = JSON.parse(fs.readFileSync('signals.json', 'utf-8'));
 
 let index = 0;
@@ -24,7 +23,6 @@ function sendNext() {
 
   index++;
 
-  // small delay to avoid flooding (adjust as needed)
   setTimeout(sendNext, 0);
 }
 

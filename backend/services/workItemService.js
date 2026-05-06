@@ -1,8 +1,8 @@
 const { pool } = require('../database/postgres');
 const { v4: uuidv4 } = require('uuid');
 
-
-const {getIO} = require("../socket/socket"); 
+const {dispatchAlert} = require("./alertService"); 
+const {emitWorkItemUpdate} = require("../socket/socket");
 
 async function createWorkItem(signal) {
   const query = `
@@ -36,8 +36,14 @@ async function createWorkItem(signal) {
 
 
   const result = await pool.query(query, values);
+  const newItem = result.rows[0]; 
+
   console.log("signal emitted"); 
+  dispatchAlert(newItem);
+  emitWorkItemUpdate("work_item_created", newItem);
+
   return result.rows[0];
+
 }
 
 async function findOpenWorkItem(signal) {
@@ -62,23 +68,25 @@ async function findOpenWorkItem(signal) {
 }
 
 async function updateWorkItem(existingItem, signal) {
-
   const query = `
-  UPDATE work_items
+    UPDATE work_items
     SET 
-        signal_count = signal_count + 1,
-        last_seen = NOW()
-    WHERE id = $1;`;
+      signal_count = signal_count + 1,
+      last_seen = $1,
+      updated_at = NOW()
+    WHERE id = $2
+    RETURNING *;
+  `;
 
   const values = [
     new Date(signal.timestamp),
-    new Date(),
     existingItem.id
   ];
 
-
   const result = await pool.query(query, values);
   console.log("signal emitted"); 
+  emitWorkItemUpdate("work_item_updated", result.rows[0]);
+
   return result.rows[0];
 }
 
